@@ -1,0 +1,2 @@
+# TinySqueeze
+ Image compressor app
