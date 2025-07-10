@@ -1,133 +1,90 @@
 import streamlit as st
-from PIL import Image
-import io
+from moviepy.editor import VideoFileClip
 import os
-import subprocess
-import uuid
+import io
+import tempfile
 
 # --- Page Setup ---
-st.set_page_config(page_title="TinySqueeze - Image & Video Compressor", page_icon="🧊")
+st.set_page_config(page_title="TinySqueeze - Video Compressor", page_icon="🎥")
 
 # --- Header ---
 col1, col2, col3 = st.columns([1, 2, 1])
 with col2:
-    try:
-        st.image("assets/logo.png", width=120)
-    except:
-        st.warning("Logo not found in assets/logo.png")
+    st.image("assets/logo.png", width=120)
     st.markdown("<h1 style='text-align: center;'>TinySqueeze</h1>", unsafe_allow_html=True)
-    st.caption("Compress your images or videos instantly. Fast, free, and secure.")
+    st.caption("Compress your videos instantly. Fast, free, and secure.")
 
 # --- Sidebar ---
 with st.sidebar:
     st.header("About TinySqueeze")
     st.markdown("""
-    📷 Upload `.jpg`, `.png` or `.mp4` files  
-    🎛️ Choose your compression quality  
+    🎥 Upload `.mp4` video files  
+    🎛️ Choose your compression bitrate  
     📉 Download reduced file instantly  
-    🔒 Files are not saved or stored.
+    🔒 Your files are not saved or stored.
     """)
 
 # --- File Upload ---
-uploaded_file = st.file_uploader("Upload an image or video", type=["jpg", "jpeg", "png", "mp4"])
+uploaded_file = st.file_uploader("Upload your video", type=["mp4"])
 
-if uploaded_file:
-    file_ext = uploaded_file.name.split(".")[-1].lower()
+# --- Bitrate Slider ---
+bitrate = st.slider("Select bitrate for compression (lower = smaller size)", 300, 3000, 800, step=100)
+bitrate_str = f"{bitrate}k"
 
-    # --- Image Compression ---
-    if file_ext in ["jpg", "jpeg", "png"]:
-        st.image(uploaded_file, caption="Original Image", use_container_width=True)
-        quality = st.slider("Select image compression quality", 10, 95, 60)
+# --- Compression Logic ---
+if uploaded_file is not None:
+    st.video(uploaded_file)
 
-        if st.button("Compress Image"):
-            with st.spinner("Compressing image..."):
-                try:
-                    image = Image.open(uploaded_file)
-                    if image.mode in ("RGBA", "P"):
-                        image = image.convert("RGB")
+    if st.button("Compress Video"):
+        with st.spinner("Compressing video..."):
+            try:
+                # Save uploaded file to a temp location
+                temp_input = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
+                temp_input.write(uploaded_file.read())
+                temp_input.close()
 
-                    compressed_io = io.BytesIO()
-                    image.save(compressed_io, format="JPEG", optimize=True, quality=quality)
-                    compressed_io.seek(0)
+                # Output path
+                temp_output = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
+                temp_output.close()
 
-                    original_kb = len(uploaded_file.getvalue()) / 1024
-                    compressed_kb = len(compressed_io.getvalue()) / 1024
-                    percent_saved = 100 - (compressed_kb / original_kb * 100)
+                # Load and compress using moviepy
+                clip = VideoFileClip(temp_input.name)
+                clip.write_videofile(
+                    temp_output.name,
+                    codec="libx264",
+                    audio_codec="aac",
+                    bitrate=bitrate_str,
+                    threads=4,
+                    logger=None  # Disable verbose logging
+                )
 
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.markdown("#### Original")
-                        st.image(uploaded_file, use_container_width=True)
-                        st.write(f"{original_kb:.2f} KB")
+                # Read compressed file
+                with open(temp_output.name, "rb") as f:
+                    compressed_data = f.read()
 
-                    with col2:
-                        st.markdown("#### Compressed")
-                        st.image(compressed_io, use_container_width=True)
-                        st.write(f"{compressed_kb:.2f} KB")
-                        st.success(f"Saved: {percent_saved:.1f}%")
+                # Size Comparison
+                original_size = len(uploaded_file.getvalue()) / (1024 * 1024)
+                compressed_size = len(compressed_data) / (1024 * 1024)
+                st.success(f"✅ Compression complete! 🎉")
+                st.write(f"📦 **Original Size:** {original_size:.2f} MB")
+                st.write(f"📉 **Compressed Size:** {compressed_size:.2f} MB")
+                st.write(f"💡 Saved: {100 - (compressed_size / original_size * 100):.1f}%")
 
-                    st.download_button(
-                        label="⬇️ Download Compressed Image",
-                        data=compressed_io,
-                        file_name=f"{uploaded_file.name.split('.')[0]}_compressed.jpg",
-                        mime="image/jpeg"
-                    )
-                except Exception as e:
-                    st.error(f"Image compression failed: {e}")
+                # Download button
+                st.download_button(
+                    label="⬇️ Download Compressed Video",
+                    data=compressed_data,
+                    file_name="compressed_video.mp4",
+                    mime="video/mp4"
+                )
 
-    # --- Video Compression ---
-    elif file_ext == "mp4":
-        st.video(uploaded_file)
-        crf = st.slider("Select video compression level (CRF)", 18, 40, 28)
-        st.caption("Lower CRF = better quality, higher size")
+                # Clean up
+                os.remove(temp_input.name)
+                os.remove(temp_output.name)
 
-        if st.button("Compress Video"):
-            with st.spinner("Compressing video..."):
-                try:
-                    temp_input_path = f"temp_input_{uuid.uuid4()}.mp4"
-                    temp_output_path = f"temp_output_{uuid.uuid4()}.mp4"
-
-                    # Save uploaded video to disk
-                    with open(temp_input_path, "wb") as f:
-                        f.write(uploaded_file.read())
-
-                    # FFmpeg compression using CRF (Constant Rate Factor)
-                    command = [
-                        "ffmpeg", "-i", temp_input_path,
-                        "-vcodec", "libx264", "-crf", str(crf),
-                        "-preset", "fast",
-                        "-y", temp_output_path
-                    ]
-                    subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-
-                    with open(temp_output_path, "rb") as f:
-                        compressed_video = f.read()
-
-                    original_mb = len(uploaded_file.getvalue()) / (1024 * 1024)
-                    compressed_mb = len(compressed_video) / (1024 * 1024)
-                    saved = 100 - (compressed_mb / original_mb * 100)
-
-                    st.video(compressed_video)
-                    st.write(f"🎞️ Original: {original_mb:.2f} MB")
-                    st.write(f"🧊 Compressed: {compressed_mb:.2f} MB")
-                    st.success(f"Saved: {saved:.1f}%")
-
-                    st.download_button(
-                        label="⬇️ Download Compressed Video",
-                        data=compressed_video,
-                        file_name=f"{uploaded_file.name.split('.')[0]}_compressed.mp4",
-                        mime="video/mp4"
-                    )
-
-                    # Clean up temp files
-                    os.remove(temp_input_path)
-                    os.remove(temp_output_path)
-
-                except Exception as e:
-                    st.error(f"Video compression failed: {e}")
+            except Exception as e:
+                st.error(f"Compression failed: {e}")
 
 # --- Footer ---
 st.markdown("---")
-st.markdown(
-    "Made with ❤️ by **Vasanth** | [GitHub](https://github.com/Vasanth-sjr) | [Contact](mailto:sjrvasanth@gmail.com)"
-)
+st.markdown("Made with ❤️ by **Vasanth** | [GitHub](https://github.com/Vasanth-sjr) | [Contact](mailto:sjrvasanth@gmail.com)")
