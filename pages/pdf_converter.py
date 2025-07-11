@@ -12,22 +12,19 @@ st.caption("Capture or upload images and convert them into a single PDF. Simple.
 with st.sidebar:
     st.header("📚 How it Works")
     st.markdown("""
-    - 📷 Capture photos using your phone camera  
     - 🖼️ Upload one or more existing images  
     - 📄 Combine all into one PDF  
     - 🔒 Your data never leaves your device
     """)
 
-# --- Upload or Capture ---
-st.subheader("Step 1: Upload or Take Photos")
+# --- Upload Images ---
+st.subheader("Step 1: Upload Your Images")
 
 uploaded_images = st.file_uploader(
     "Upload images",
     type=["jpg", "jpeg", "png"],
     accept_multiple_files=True
 )
-
-camera_image = st.camera_input("Or take a photo")
 
 # --- Process Images ---
 image_list = []
@@ -38,12 +35,6 @@ if uploaded_images:
         if img.mode in ("RGBA", "P"):
             img = img.convert("RGB")
         image_list.append(img)
-
-if camera_image:
-    img = Image.open(camera_image)
-    if img.mode in ("RGBA", "P"):
-        img = img.convert("RGB")
-    image_list.append(img)
 
 # --- Convert to PDF ---
 if image_list:
@@ -64,5 +55,4 @@ if image_list:
                 mime="application/pdf"
             )
 else:
-    st.info("Upload or capture at least one image to proceed.")
-#t
+    st.info("Upload at least one image to proceed.")
