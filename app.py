@@ -4,24 +4,38 @@ import io
 import tempfile
 import subprocess
 import os
+import fitz  # PyMuPDF
 
 st.set_page_config(page_title="TinySqueeze - Smart Compressor", page_icon="🧊")
-st.markdown("<h1 style='text-align: center;'>🧊 TinySqueeze</h1>", unsafe_allow_html=True)
-st.caption("Compress images or videos to an exact file size. Smart. Precise. Secure.")
-
 with st.sidebar:
-    st.header("About TinySqueeze")
+    st.image("https://img.icons8.com/color/96/compression.png", width=80)  # Optional icon
+    st.markdown("## 💡 TinySqueeze Tips")
     st.markdown("""
-    📷 Compress `.jpg`, `.jpeg`, `.png` images  
-    🎥 Compress `.mp4`, `.mov`, `.avi`, `.mkv` videos  
-    🎯 Specify **exact file size target**  
-    🔒 Secure — No files are saved  
-    🚀 Smart compression with quality preservation  
-    📄 Convert images to PDF (see sidebar navigation)
+- 📷 Upload clear, high-quality images for better compression results.
+- 🎥 Long videos may take a few extra seconds — hang tight!
+- 📄 For scanned/image-heavy PDFs, compression works best.
+
+🔐 Your files are processed locally. We never store or share your content.
+
+🕒 Typical compression time: **3–5 seconds**.
     """)
 
-# -- File Upload --
-uploaded_file = st.file_uploader("Upload image or video", type=["jpg", "jpeg", "png", "mp4", "mov", "mkv", "avi"])
+    st.markdown("---")
+    st.markdown("Need help? [Contact Me](mailto:sjrvasanth@gmail.com)")
+
+st.markdown("<h1 style='text-align: center;'>🧊 TinySqueeze</h1>", unsafe_allow_html=True)
+
+st.markdown("""
+<div style='text-align: center; font-size: 18px; margin-bottom: 1rem;'>
+  Compress or reduce the size of your <b>image</b>, <b>video</b>, or <b>PDF</b> in under <b>5 seconds</b>. <br>
+  100% safe, secure, and smart compression — right in your browser.
+</div>
+""", unsafe_allow_html=True)
+
+# --- User Selects File Type ---
+option = st.selectbox("🔘 What do you want to compress?", ("Image (JPG, PNG)", "Video (MP4, MOV)", "PDF"))
+
+# ---------------- Compression Logic ---------------- #
 
 def compress_image_exact(image_bytes, target_kb):
     img = Image.open(io.BytesIO(image_bytes))
@@ -43,18 +57,6 @@ def compress_image_exact(image_bytes, target_kb):
             max_q = q - 1
         else:
             min_q = q + 1
-    if len(best_result) / 1024 < target_kb * 0.9:
-        scale = 1.05
-        while True:
-            width, height = img.size
-            img = img.resize((int(width * scale), int(height * scale)))
-            buffer = io.BytesIO()
-            img.save(buffer, format="JPEG", optimize=True, quality=final_q)
-            size_kb = len(buffer.getvalue()) / 1024
-            if size_kb >= target_kb or scale > 2.0:
-                break
-            best_result = buffer.getvalue()
-            scale += 0.05
     return best_result
 
 def compress_video_to_target(video_data, target_mb):
@@ -78,39 +80,89 @@ def compress_video_to_target(video_data, target_mb):
     os.remove(output_path)
     return compressed_data
 
-if uploaded_file:
-    file_type = uploaded_file.type
-    if "image" in file_type:
+def compress_pdf_exact(pdf_data, target_kb):
+    best_result = pdf_data
+    best_diff = float("inf")
+    for scale in [1.0, 0.9, 0.8, 0.7, 0.6]:
+        for q in range(90, 4, -10):
+            pdf_in = fitz.open(stream=pdf_data, filetype="pdf")
+            out_pdf = fitz.open()
+            for page in pdf_in:
+                mat = fitz.Matrix(scale, scale)
+                pix = page.get_pixmap(matrix=mat, alpha=False)
+                img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp_img:
+                    img.save(tmp_img.name, format="JPEG", quality=q)
+                    tmp_img.seek(0)
+                    img_data = tmp_img.read()
+                rect = page.rect
+                img_page = out_pdf.new_page(width=rect.width, height=rect.height)
+                img_page.insert_image(rect, stream=img_data)
+            buffer = io.BytesIO()
+            out_pdf.save(buffer)
+            buffer.seek(0)
+            compressed = buffer.getvalue()
+            size_kb = len(compressed) / 1024
+            diff = abs(size_kb - target_kb)
+            if diff < best_diff:
+                best_result = compressed
+                best_diff = diff
+            pdf_in.close()
+            out_pdf.close()
+            if size_kb <= target_kb * 1.02:
+                return compressed
+    return best_result
+
+# ---------------- UI Logic ---------------- #
+
+if option == "Image (JPG, PNG)":
+    uploaded_file = st.file_uploader("📤 Upload Image", type=["jpg", "jpeg", "png"])
+    if uploaded_file:
         image_data = uploaded_file.read()
         original_kb = len(image_data) / 1024
-        st.success(f"📦 Original file size: {original_kb:.2f} KB")
-        st.image(image_data, caption="🖼️ Original Image", use_container_width=True)
-        target_kb = st.slider("🎯 Target file size (KB)", 10, int(original_kb), int(original_kb * 0.7), step=1)
+        st.success(f"📦 Original Image Size: {original_kb:.2f} KB")
+        st.image(image_data, use_container_width=True)
+        target_kb = st.slider("🎯 Target size (KB)", 10, int(original_kb), int(original_kb * 0.7))
         if st.button("📉 Compress Image"):
-            with st.spinner("Compressing image..."):
-                compressed = compress_image_exact(image_data, target_kb)
-                compressed_kb = len(compressed) / 1024
-                st.markdown("#### 🧊 Compressed Image")
-                st.image(compressed, use_container_width=True)
-                st.write(f"Size: {compressed_kb:.2f} KB")
+            with st.spinner("Compressing..."):
+                result = compress_image_exact(image_data, target_kb)
+                compressed_kb = len(result) / 1024
+                st.image(result)
+                st.write(f"📏 Size: {compressed_kb:.2f} KB")
                 st.write(f"💡 Saved: {100 - (compressed_kb/original_kb * 100):.1f}%")
-                st.download_button("⬇️ Download Compressed Image", compressed, "compressed_image.jpg", "image/jpeg")
+                st.download_button("⬇️ Download", result, "compressed_image.jpg", "image/jpeg")
 
-    elif "video" in file_type:
+elif option == "Video (MP4, MOV)":
+    uploaded_file = st.file_uploader("📤 Upload Video", type=["mp4", "mov", "avi", "mkv"])
+    if uploaded_file:
         video_data = uploaded_file.read()
         original_mb = len(video_data) / (1024 * 1024)
-        st.success(f"📦 Original file size: {original_mb:.2f} MB")
+        st.success(f"📦 Original Video Size: {original_mb:.2f} MB")
         st.video(video_data)
-        target_mb = st.slider("🎯 Target size (MB)", 1, int(original_mb), max(1, int(original_mb * 0.6)), step=1)
+        target_mb = st.slider("🎯 Target size (MB)", 1, int(original_mb), max(1, int(original_mb * 0.6)))
         if st.button("📉 Compress Video"):
-            with st.spinner("Compressing video..."):
-                compressed_data = compress_video_to_target(video_data, target_mb)
-                compressed_mb = len(compressed_data) / (1024 * 1024)
-                st.markdown("#### 🧊 Compressed Video")
-                st.video(compressed_data)
-                st.write(f"📉 Compressed Size: {compressed_mb:.2f} MB")
+            with st.spinner("Compressing..."):
+                result = compress_video_to_target(video_data, target_mb)
+                compressed_mb = len(result) / (1024 * 1024)
+                st.video(result)
+                st.write(f"📏 Size: {compressed_mb:.2f} MB")
                 st.write(f"💡 Saved: {100 - (compressed_mb/original_mb * 100):.1f}%")
-                st.download_button("⬇️ Download Compressed Video", compressed_data, "compressed_video.mp4", "video/mp4")
+                st.download_button("⬇️ Download", result, "compressed_video.mp4", "video/mp4")
+
+elif option == "PDF":
+    uploaded_file = st.file_uploader("📤 Upload PDF", type=["pdf"])
+    if uploaded_file:
+        pdf_data = uploaded_file.read()
+        original_kb = len(pdf_data) / 1024
+        st.success(f"📦 Original PDF Size: {original_kb:.2f} KB")
+        target_kb = st.slider("🎯 Target size (KB)", 30, int(original_kb), int(original_kb * 0.8))
+        if st.button("📉 Compress PDF"):
+            with st.spinner("Compressing PDF..."):
+                result = compress_pdf_exact(pdf_data, target_kb)
+                compressed_kb = len(result) / 1024
+                st.write(f"📏 Size: {compressed_kb:.2f} KB")
+                st.write(f"💡 Saved: {100 - (compressed_kb/original_kb * 100):.1f}%")
+                st.download_button("⬇️ Download", result, "compressed.pdf", "application/pdf")
 
 st.markdown("---")
-st.markdown("Made with ❤️ by **Vasanth** | [GitHub](https://github.com/Vasanth-sjr) | [Contact](mailto:sjrvasanth@gmail.com)")
+st.markdown("Made with ❤️ by **Vasanth** | [GitHub](https://github.com/Vasanth-sjr)")

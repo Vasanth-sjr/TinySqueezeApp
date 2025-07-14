@@ -2,3 +2,5 @@ streamlit
 pillow
 imageio
 imageio-ffmpeg
+ffmpeg-python
+PyMuPDF
