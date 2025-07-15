@@ -4,3 +4,4 @@ imageio
 imageio-ffmpeg
 ffmpeg-python
 PyMuPDF
+streamlit-lottie
