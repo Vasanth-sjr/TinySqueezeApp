@@ -5,10 +5,21 @@ import tempfile
 import subprocess
 import os
 import fitz  # PyMuPDF
+import json
+from streamlit_lottie import st_lottie
 
-st.set_page_config(page_title="TinySqueeze - Smart Compressor", page_icon="🧊")
+# --- Page Config ---
+st.set_page_config(page_title="TinySqueeze - Smart Compressor", layout="wide")
+
+# --- Load Lottie Animation ---
+def load_lottie_file(filepath: str):
+    with open(filepath, "r") as f:
+        return json.load(f)
+
+celebration_anim = load_lottie_file("animations/celebration.json")
+
+# --- Sidebar ---
 with st.sidebar:
-    st.image("https://img.icons8.com/color/96/compression.png", width=80)  # Optional icon
     st.markdown("## 💡 TinySqueeze Tips")
     st.markdown("""
 - 📷 Upload clear, high-quality images for better compression results.
@@ -19,12 +30,11 @@ with st.sidebar:
 
 🕒 Typical compression time: **3–5 seconds**.
     """)
-
     st.markdown("---")
     st.markdown("Need help? [Contact Me](mailto:sjrvasanth@gmail.com)")
 
-st.markdown("<h1 style='text-align: center;'>🧊 TinySqueeze</h1>", unsafe_allow_html=True)
-
+# --- Title & Description ---
+st.markdown("<h1 style='text-align: center;'>🧊TinySqueeze</h1>", unsafe_allow_html=True)
 st.markdown("""
 <div style='text-align: center; font-size: 18px; margin-bottom: 1rem;'>
   Compress or reduce the size of your <b>image</b>, <b>video</b>, or <b>PDF</b> in under <b>5 seconds</b>. <br>
@@ -32,7 +42,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# --- User Selects File Type ---
+# --- File Type Selection ---
 option = st.selectbox("🔘 What do you want to compress?", ("Image (JPG, PNG)", "Video (MP4, MOV)", "PDF"))
 
 # ---------------- Compression Logic ---------------- #
@@ -42,7 +52,7 @@ def compress_image_exact(image_bytes, target_kb):
     if img.mode in ["RGBA", "P"]:
         img = img.convert("RGB")
     min_q, max_q = 5, 95
-    best_result, best_diff, final_q = None, float("inf"), 95
+    best_result, best_diff = None, float("inf")
     for _ in range(15):
         q = (min_q + max_q) // 2
         buffer = io.BytesIO()
@@ -52,7 +62,6 @@ def compress_image_exact(image_bytes, target_kb):
         if diff < best_diff:
             best_result = buffer.getvalue()
             best_diff = diff
-            final_q = q
         if size_kb > target_kb:
             max_q = q - 1
         else:
@@ -115,8 +124,20 @@ def compress_pdf_exact(pdf_data, target_kb):
 
 # ---------------- UI Logic ---------------- #
 
+def show_celebration():
+    st_lottie(
+        celebration_anim,
+        speed=1,
+        reverse=False,
+        loop=False,
+        quality="high",
+        height=700,
+        width=1200,
+        key="celebration"
+    )
+
 if option == "Image (JPG, PNG)":
-    uploaded_file = st.file_uploader("📤 Upload Image", type=["jpg", "jpeg", "png"])
+    uploaded_file = st.file_uploader("📄 Upload Image", type=["jpg", "jpeg", "png"])
     if uploaded_file:
         image_data = uploaded_file.read()
         original_kb = len(image_data) / 1024
@@ -130,10 +151,11 @@ if option == "Image (JPG, PNG)":
                 st.image(result)
                 st.write(f"📏 Size: {compressed_kb:.2f} KB")
                 st.write(f"💡 Saved: {100 - (compressed_kb/original_kb * 100):.1f}%")
+                show_celebration()
                 st.download_button("⬇️ Download", result, "compressed_image.jpg", "image/jpeg")
 
 elif option == "Video (MP4, MOV)":
-    uploaded_file = st.file_uploader("📤 Upload Video", type=["mp4", "mov", "avi", "mkv"])
+    uploaded_file = st.file_uploader("📄 Upload Video", type=["mp4", "mov", "avi", "mkv"])
     if uploaded_file:
         video_data = uploaded_file.read()
         original_mb = len(video_data) / (1024 * 1024)
@@ -147,10 +169,11 @@ elif option == "Video (MP4, MOV)":
                 st.video(result)
                 st.write(f"📏 Size: {compressed_mb:.2f} MB")
                 st.write(f"💡 Saved: {100 - (compressed_mb/original_mb * 100):.1f}%")
+                show_celebration()
                 st.download_button("⬇️ Download", result, "compressed_video.mp4", "video/mp4")
 
 elif option == "PDF":
-    uploaded_file = st.file_uploader("📤 Upload PDF", type=["pdf"])
+    uploaded_file = st.file_uploader("📄 Upload PDF", type=["pdf"])
     if uploaded_file:
         pdf_data = uploaded_file.read()
         original_kb = len(pdf_data) / 1024
@@ -162,7 +185,9 @@ elif option == "PDF":
                 compressed_kb = len(result) / 1024
                 st.write(f"📏 Size: {compressed_kb:.2f} KB")
                 st.write(f"💡 Saved: {100 - (compressed_kb/original_kb * 100):.1f}%")
+                show_celebration()
                 st.download_button("⬇️ Download", result, "compressed.pdf", "application/pdf")
 
+# --- Footer ---
 st.markdown("---")
 st.markdown("Made with ❤️ by **Vasanth** | [GitHub](https://github.com/Vasanth-sjr)")
