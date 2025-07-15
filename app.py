@@ -125,16 +125,18 @@ def compress_pdf_exact(pdf_data, target_kb):
 # ---------------- UI Logic ---------------- #
 
 def show_celebration():
-    st_lottie(
-        celebration_anim,
-        speed=1,
-        reverse=False,
-        loop=False,
-        quality="high",
-        height=700,
-        width=1200,
-        key="celebration"
-    )
+    with st.container():
+        st_lottie(
+            celebration_anim,
+            speed=1,
+            reverse=False,
+            loop=False,
+            quality="high",
+            height=300,
+            key="celebration"
+        )
+
+
 
 if option == "Image (JPG, PNG)":
     uploaded_file = st.file_uploader("📄 Upload Image", type=["jpg", "jpeg", "png"])
